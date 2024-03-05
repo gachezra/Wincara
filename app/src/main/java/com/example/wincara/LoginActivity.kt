@@ -6,19 +6,20 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
-import java.io.BufferedReader
-import java.io.FileInputStream
-import java.io.InputStreamReader
 
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var etUsername: EditText
     private lateinit var etPassword: EditText
     private lateinit var btnLogin: Button
+    private lateinit var dbHelper: SignupActivity.DBHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.login)
+
+        // Initialize database helper
+        dbHelper = SignupActivity.DBHelper(this)
 
         // Find views
         etUsername = findViewById(R.id.etUsername)
@@ -29,10 +30,10 @@ class LoginActivity : AppCompatActivity() {
             val username = etUsername.text.toString()
             val password = etPassword.text.toString()
 
-            // Retrieve stored credentials from signup file
-            val storedCredentials = readStoredCredentials()
+            // Retrieve stored credentials from the SQLite database
+            val storedCredentials = readStoredCredentials(username)
 
-            if (storedCredentials != null && storedCredentials.first == username && storedCredentials.second == password) {
+            if (storedCredentials != null && storedCredentials.second == password) {
                 // Credentials match, proceed to welcome activity
                 val intent = Intent(this, WelcomeActivity::class.java)
                 startActivity(intent)
@@ -44,16 +45,30 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun readStoredCredentials(): Pair<String, String>? {
-        return try {
-            val fileInputStream: FileInputStream = openFileInput("credentials.txt")
-            val inputStreamReader = InputStreamReader(fileInputStream)
-            val bufferedReader = BufferedReader(inputStreamReader)
-            val username = bufferedReader.readLine().removePrefix("Username: ")
-            val password = bufferedReader.readLine().removePrefix("Password: ")
-            bufferedReader.close()
-            Pair(username, password)
-        } catch (e: Exception) {
+    private fun readStoredCredentials(username: String): Pair<String, String>? {
+        val db = dbHelper.readableDatabase
+        val projection = arrayOf(
+            UserContract.UserEntry.COLUMN_NAME_PASSWORD
+        )
+
+        val selection = "${UserContract.UserEntry.COLUMN_NAME_USERNAME} = ?"
+        val selectionArgs = arrayOf(username)
+
+        val cursor = db.query(
+            UserContract.UserEntry.TABLE_NAME,
+            projection,
+            selection,
+            selectionArgs,
+            null,
+            null,
+            null
+        )
+
+        return if (cursor.moveToNext()) {
+            val passwordIndex = cursor.getColumnIndexOrThrow(UserContract.UserEntry.COLUMN_NAME_PASSWORD)
+            val storedPassword = cursor.getString(passwordIndex)
+            Pair(username, storedPassword)
+        } else {
             null
         }
     }
